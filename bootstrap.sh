@@ -26,6 +26,10 @@
 # lane-specific judgement around it (see brief-template.md).
 # Watching: run  tower wait --timeout 540 --stale 30  in the background for
 # task-level attention, and watch-lanes.sh for process-level state.
+# Wrapping up: when the run is over, `tower close "<how it ended>"` and stop the
+# executors; the typecheck and tests panes may go, but the TOWER PANE STAYS OPEN.
+# It is the record of the run — the closed banner and the transcript are what the
+# human reads afterwards. Never `herdr pane close` it; the human quits it with `q`.
 set -euo pipefail
 test "${HERDR_ENV:-}" = 1 || { echo "not inside herdr" >&2; exit 1; }
 command -v tower >/dev/null || { echo "tower is not on PATH (npm i -g @phutschi/tower, or ~/.local/bin/tower → bun run ~/code/tower/src/cli.ts)" >&2; exit 1; }
@@ -83,6 +87,7 @@ typecheck:      $TYPECHECK_PANE   ($TYPECHECK_CMD)
                 -> herdr pane read $TYPECHECK_PANE --source recent-unwrapped --lines 60
 tests:          $TESTS_PANE   ($TEST_PKG: $TEST_CMD_RESOLVED)
 tower:          $TOWER_PANE   (console; reporting: tower task|block|note from the repo root)
+                keep this pane open after the run — it is the record; the human closes it with q
 TXT
 
 # The agent. A fresh checkout shows claude's trust prompt, which herdr reports
@@ -101,3 +106,4 @@ cat "$RUN_DIR/panes.txt"
 echo
 echo "next:  tower brief A > $RUN_DIR/brief-A.md   → add the lane judgement (brief-template.md), then"
 echo "       herdr agent prompt $EXECUTOR \"\$(cat $RUN_DIR/brief-A.md)\""
+echo "when done:  tower close \"<how it ended>\"; leave the tower pane $TOWER_PANE open (the human quits it with q)"
