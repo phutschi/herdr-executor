@@ -32,8 +32,12 @@ PANE=$(herdr pane move "$WT_PANE" --tab "$HERDR_TAB_ID" --split right --target-p
 
 [ -f "$WT/.env" ] || cp "$REPO_ROOT/.env" "$WT/.env" 2>/dev/null || true
 INSTALL_CMD="$( cd "$REPO_ROOT" && . "$KIT/detect-stack.sh" && echo "$INSTALL_CMD" )"
-herdr pane run "$PANE" "cd '$WT' && $INSTALL_CMD"
-herdr pane wait-output "$PANE" --regex 'Done in |Already up to date|Progress: resolved|packages installed' --timeout 300000 >/dev/null || true
+# Wait for the install by a sentinel of our own, not the package manager's wording
+# (bun prints "[1.00ms] done" for a dependency-free package; nothing generic matches
+# bun, pnpm, yarn and npm alike). The quotes keep the echoed command line from matching.
+herdr pane run "$PANE" "cd '$WT' && $INSTALL_CMD; echo HERDR_INSTALL_'DONE'"
+herdr pane wait-output "$PANE" --source recent-unwrapped --regex '^HERDR_INSTALL_DONE$' --timeout 300000 >/dev/null \
+  || echo "add-lane: install did not finish in 5 min; starting the agent anyway" >&2
 
 start_agent() { herdr agent start "$NAME" --kind claude --pane "$PANE" -- --model "$EXECUTOR_MODEL"; }
 if ! out=$(start_agent 2>&1); then
