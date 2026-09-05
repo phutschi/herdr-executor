@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Add a parallel lane: a git worktree with its own claude executor, placed in
+# tab 1 to the right of the previous lane, owning the given task ids in tower.
+#
+#   add-lane.sh <run-dir> <lane-letter> <branch> <base-branch> <task-ids>
+#
+# Worktrees live at <repo>/.worktrees/<branch>. Copies .env (gitignored) and
+# installs with the repo package manager. The worktree shares the repo's
+# common git dir, so `tower` inside it finds the same run with no flags.
+set -euo pipefail
+test "${HERDR_ENV:-}" = 1 || { echo "not inside herdr" >&2; exit 1; }
+
+RUN_DIR="$1"; LANE="$2"; BRANCH="$3"; BASE="$4"; TASKS="$5"
+KIT="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(git rev-parse --path-format=absolute --git-common-dir | sed 's#/\.git$##')"
+WT="$REPO_ROOT/.worktrees/$BRANCH"
+NAME="$(basename "$REPO_ROOT")-lane-$(echo "$LANE" | tr 'A-Z' 'a-z')"
+EXECUTOR_MODEL="${EXECUTOR_MODEL:-claude-sonnet-5[1m]}"
+
+# Ownership first: tower refuses an unknown id, so a typo stops here, before a worktree exists.
+tower assign "$LANE" "$TASKS"
+
+out=$(herdr worktree create --cwd "$REPO_ROOT" --branch "$BRANCH" --base "$BASE" --path "$WT" --label "$NAME" --no-focus)
+WT_PANE=$(echo "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["root_pane"]["pane_id"])')
+
+# Lanes line up left→right in tab 1: the newest splits the previous one. The
+# previous lane's pane comes from panes.txt; without it, the newest agent pane in this tab.
+PREV=$(sed -nE 's/^(executor|lane [A-Z]): +([^ ]+).*/\2/p' "$RUN_DIR/panes.txt" 2>/dev/null | tail -1 || true)
+[ -n "$PREV" ] || PREV=$(herdr pane list | python3 -c 'import json,sys,os; t=os.environ["HERDR_TAB_ID"]; ps=[p for p in json.load(sys.stdin)["result"]["panes"] if p["tab_id"]==t and p.get("agent")]; print(ps[-1]["pane_id"])')
+PANE=$(herdr pane move "$WT_PANE" --tab "$HERDR_TAB_ID" --split right --target-pane "$PREV" --ratio 0.5 --no-focus \
+  | python3 -c 'import json,sys; r=json.load(sys.stdin)["result"]; m=r.get("move_result",r); print(m["pane"]["pane_id"])')
+
+[ -f "$WT/.env" ] || cp "$REPO_ROOT/.env" "$WT/.env" 2>/dev/null || true
+INSTALL_CMD="$( cd "$REPO_ROOT" && . "$KIT/detect-stack.sh" && echo "$INSTALL_CMD" )"
+herdr pane run "$PANE" "cd '$WT' && $INSTALL_CMD"
+herdr pane wait-output "$PANE" --regex 'Done in |Already up to date|Progress: resolved|packages installed' --timeout 300000 >/dev/null || true
+
+start_agent() { herdr agent start "$NAME" --kind claude --pane "$PANE" -- --model "$EXECUTOR_MODEL"; }
+if ! out=$(start_agent 2>&1); then
+  if echo "$out" | grep -q "blocked during startup"; then
+    herdr pane send-keys "$PANE" Down Enter >/dev/null; sleep 3
+    herdr agent get "$NAME" >/dev/null 2>&1 || start_agent >/dev/null
+  else
+    echo "$out" >&2; exit 1
+  fi
+fi
+
+printf 'lane %s:         %s   (agent "%s", branch %s, worktree %s, model %s)\n' "$LANE" "$PANE" "$NAME" "$BRANCH" "$WT" "$EXECUTOR_MODEL" >> "$RUN_DIR/panes.txt"
+echo "lane $LANE ready: agent $NAME in $PANE — next:  tower brief $LANE  (+ merge points), then  herdr agent prompt $NAME \"<brief>\""
