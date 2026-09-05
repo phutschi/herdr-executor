@@ -84,6 +84,7 @@ else
   case "$SOURCE" in *.md) cp "$SOURCE" "$RUN_DIR/plan.md" ;; *) cp "$SOURCE" "$RUN_DIR/tasks.tsv" ;; esac
   cat > "$RUN_DIR/run.txt" <<TXT
 title:            $PLAN
+repo:             $REPO
 branch:           $BRANCH
 plan:             $RUN_DIR/$(basename "$SOURCE" | sed 's/.*\.md$/plan.md/; s/.*\.tsv$/tasks.tsv/')
 implementer:      $EXECUTOR_MODEL

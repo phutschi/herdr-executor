@@ -51,6 +51,7 @@ if command -v tower >/dev/null; then
   if finished; then echo "tower: run complete or closed"; alert=1; fi
   echo "--- tower"; tower state --json --run "$RUN_DIR" 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["summary"], "attention:", d["attention"])' 2>/dev/null || true
 else
-  echo "--- no tower: task state is in git —"; git log --oneline --branches="*" -8 2>/dev/null | sed 's/^/    /'
+  REPO=$(sed -n 's/^repo: *//p' "$RUN_DIR/run.txt" 2>/dev/null); REPO=${REPO:-$PWD}
+  echo "--- no tower: task state is in git ($REPO) —"; git -C "$REPO" log --oneline --branches="*" -8 2>/dev/null | sed 's/^/    /'
 fi
 [ "$alert" = 1 ] && exit 0 || exit 3
