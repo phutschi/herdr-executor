@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Recreate the standard herdr orchestration layout for executing a plan, with
-# tower (github.com/phutschi/tower) as the record and the console.
+# tower (github.com/phutschi/tower) as the record and the console when it is
+# installed. Without tower the same layout comes up: the plan is copied into the
+# run dir, lane ownership goes to <run-dir>/lanes.txt, the git log takes the
+# console pane, and lanes report through commits and their pane instead of
+# `tower task|block|note` (see brief-template.md, "Without tower").
 #
 #   bootstrap.sh <run-dir> "<plan title>" <branch> <plan.md | tasks.tsv> [test-filter]
 #
@@ -30,9 +34,21 @@
 # executors; the typecheck and tests panes may go, but the TOWER PANE STAYS OPEN.
 # It is the record of the run — the closed banner and the transcript are what the
 # human reads afterwards. Never `herdr pane close` it; the human quits it with `q`.
+# Without tower the git log pane plays that part: leave it open too.
 set -euo pipefail
 test "${HERDR_ENV:-}" = 1 || { echo "not inside herdr" >&2; exit 1; }
-command -v tower >/dev/null || { echo "tower is not on PATH (npm i -g @phutschi/tower, or ~/.local/bin/tower → bun run ~/code/tower/src/cli.ts)" >&2; exit 1; }
+HAVE_TOWER=1
+if ! command -v tower >/dev/null; then
+  HAVE_TOWER=0
+  cat >&2 <<'MSG'
+info: tower is not on PATH — running without the console. You get the same panes,
+      but no live task board, no `tower wait`, and lanes report through commits
+      and their pane instead of `tower task|block|note`.
+      To add it: github.com/phutschi/tower (binaries on the releases page;
+      npm i -g @phutschi/tower once published; or ~/.local/bin/tower →
+      bun run ~/code/tower/src/cli.ts from a checkout).
+MSG
+fi
 
 RUN_DIR="$1"; PLAN="$2"; BRANCH="$3"; SOURCE="$4"; TEST_FILTER="${5:-src}"
 KIT="$(cd "$(dirname "$0")" && pwd)"
@@ -50,16 +66,31 @@ TEST_CMD_RESOLVED="$( cd "$REPO/$TEST_PKG" 2>/dev/null || cd "$REPO"; herdr_defa
 
 # --- the run ------------------------------------------------------------------
 mkdir -p "$RUN_DIR"
-MODELS=(--model "implementer=$EXECUTOR_MODEL" --model "spec-reviewer=$SPEC_REVIEWER_MODEL" --model "quality-reviewer=$QUALITY_REVIEWER_MODEL")
-case "$SOURCE" in
-  *.md) tower init --plan "$SOURCE" --title "$PLAN" --run "$RUN_DIR" "${MODELS[@]}" ;;
-  *)    tower init --tasks "$SOURCE" --title "$PLAN" --run "$RUN_DIR" "${MODELS[@]}" ;;
-esac
-if [ -n "${LANES:-}" ]; then
-  for spec in $LANES; do tower assign "${spec%%=*}" "${spec#*=}"; done
+if [ "$HAVE_TOWER" = 1 ]; then
+  MODELS=(--model "implementer=$EXECUTOR_MODEL" --model "spec-reviewer=$SPEC_REVIEWER_MODEL" --model "quality-reviewer=$QUALITY_REVIEWER_MODEL")
+  case "$SOURCE" in
+    *.md) tower init --plan "$SOURCE" --title "$PLAN" --run "$RUN_DIR" "${MODELS[@]}" ;;
+    *)    tower init --tasks "$SOURCE" --title "$PLAN" --run "$RUN_DIR" "${MODELS[@]}" ;;
+  esac
+  if [ -n "${LANES:-}" ]; then
+    for spec in $LANES; do tower assign "${spec%%=*}" "${spec#*=}"; done
+  else
+    ALL_IDS="$(tower state --json | python3 -c 'import json,sys; print(",".join(t["id"] for t in json.load(sys.stdin)["tasks"]))')"
+    tower assign A "$ALL_IDS"
+  fi
 else
-  ALL_IDS="$(tower state --json | python3 -c 'import json,sys; print(",".join(t["id"] for t in json.load(sys.stdin)["tasks"]))')"
-  tower assign A "$ALL_IDS"
+  # The run dir is the record instead: the plan as given, the models, and the
+  # lane ownership add-lane.sh appends to.
+  case "$SOURCE" in *.md) cp "$SOURCE" "$RUN_DIR/plan.md" ;; *) cp "$SOURCE" "$RUN_DIR/tasks.tsv" ;; esac
+  cat > "$RUN_DIR/run.txt" <<TXT
+title:            $PLAN
+branch:           $BRANCH
+plan:             $RUN_DIR/$(basename "$SOURCE" | sed 's/.*\.md$/plan.md/; s/.*\.tsv$/tasks.tsv/')
+implementer:      $EXECUTOR_MODEL
+spec-reviewer:    $SPEC_REVIEWER_MODEL
+quality-reviewer: $QUALITY_REVIEWER_MODEL
+TXT
+  if [ -n "${LANES:-}" ]; then printf '%s\n' $LANES > "$RUN_DIR/lanes.txt"; else echo "A=all" > "$RUN_DIR/lanes.txt"; fi
 fi
 
 # --- panes -------------------------------------------------------------------
@@ -71,11 +102,16 @@ TOWER_PANE=$(herdr pane split --pane "$EXEC_PANE" --direction down --ratio 0.62 
 
 herdr pane run "$TYPECHECK_PANE" "$TYPECHECK_CMD"
 herdr pane run "$TESTS_PANE" "$TEST_CMD_RESOLVED"
-if [ "${GITLOG:-0}" = 1 ]; then
-  GITLOG_PANE=$(herdr pane split --pane "$TOWER_PANE" --direction right --ratio 0.35 --cwd "$REPO" --no-focus | pid)
-  herdr pane run "$GITLOG_PANE" 'while true; do clear; date +%H:%M:%S; git log --color=always --oneline --graph --decorate=short --branches="*" -14 | cut -c1-$(( $(tput cols) + 60 )); sleep 5; done'
+GITLOG_CMD='while true; do clear; date +%H:%M:%S; git log --color=always --oneline --graph --decorate=short --branches="*" -14 | cut -c1-$(( $(tput cols) + 60 )); sleep 5; done'
+if [ "$HAVE_TOWER" = 1 ]; then
+  if [ "${GITLOG:-0}" = 1 ]; then
+    GITLOG_PANE=$(herdr pane split --pane "$TOWER_PANE" --direction right --ratio 0.35 --cwd "$REPO" --no-focus | pid)
+    herdr pane run "$GITLOG_PANE" "$GITLOG_CMD"
+  fi
+  herdr pane run "$TOWER_PANE" "tower --stale $STALE"
+else
+  herdr pane run "$TOWER_PANE" "$GITLOG_CMD"   # the console pane shows the git log instead
 fi
-herdr pane run "$TOWER_PANE" "tower --stale $STALE"
 
 # panes.txt first: add-lane.sh and the brief need it even if the agent start below fails.
 cat > "$RUN_DIR/panes.txt" <<TXT
@@ -86,8 +122,16 @@ toolchain:      $PM (typecheck task: $TYPECHECK_TASK)
 typecheck:      $TYPECHECK_PANE   ($TYPECHECK_CMD)
                 -> herdr pane read $TYPECHECK_PANE --source recent-unwrapped --lines 60
 tests:          $TESTS_PANE   ($TEST_PKG: $TEST_CMD_RESOLVED)
+$( if [ "$HAVE_TOWER" = 1 ]; then cat <<T2
 tower:          $TOWER_PANE   (console; reporting: tower task|block|note from the repo root)
                 keep this pane open after the run — it is the record; the human closes it with q
+T2
+else cat <<T2
+git log:        $TOWER_PANE   (no tower installed; lanes report through commits and their pane)
+                keep this pane open after the run — it is the record; the human closes it
+run record:     $RUN_DIR/run.txt, lanes.txt, $(basename "$SOURCE" | sed 's/.*\.md$/plan.md/; s/.*\.tsv$/tasks.tsv/')
+T2
+fi )
 TXT
 
 # The agent. A fresh checkout shows claude's trust prompt, which herdr reports
@@ -104,6 +148,12 @@ fi
 
 cat "$RUN_DIR/panes.txt"
 echo
-echo "next:  tower brief A > $RUN_DIR/brief-A.md   → add the lane judgement (brief-template.md), then"
-echo "       herdr agent prompt $EXECUTOR \"\$(cat $RUN_DIR/brief-A.md)\""
-echo "when done:  tower close \"<how it ended>\"; leave the tower pane $TOWER_PANE open (the human quits it with q)"
+if [ "$HAVE_TOWER" = 1 ]; then
+  echo "next:  tower brief A > $RUN_DIR/brief-A.md   → add the lane judgement (brief-template.md), then"
+  echo "       herdr agent prompt $EXECUTOR \"\$(cat $RUN_DIR/brief-A.md)\""
+  echo "when done:  tower close \"<how it ended>\"; leave the tower pane $TOWER_PANE open (the human quits it with q)"
+else
+  echo "next:  write $RUN_DIR/brief-A.md from brief-template.md (section \"Without tower\": lane A owns all tasks, plan at $RUN_DIR), then"
+  echo "       herdr agent prompt $EXECUTOR \"\$(cat $RUN_DIR/brief-A.md)\""
+  echo "when done:  note how it ended in $RUN_DIR/run.txt; leave the git log pane $TOWER_PANE open"
+fi

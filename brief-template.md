@@ -9,6 +9,23 @@ two standing rules (never push, never open a PR). Start from that:
 Then add, above it, only what tower cannot know — and send the whole file with
 `herdr agent prompt <agent> "$(cat <run-dir>/brief-A.md)"`.
 
+## Without tower
+
+If tower is not installed (bootstrap.sh said so), write the derivable part by
+hand below the separator: the lane's task ids and the plan path from
+`<run-dir>/run.txt` and `lanes.txt`, the model roles from `run.txt`, and the two
+standing rules (never push, never open a PR). Then substitute the reporting:
+
+| with tower                              | without                                                        |
+|-----------------------------------------|----------------------------------------------------------------|
+| `tower task <id> start\|done`            | one commit per task, subject starting with the task id          |
+| `tower block <id> "<need>"`             | stop, and state exactly what you need as your reply            |
+| `tower note --lane X '<text>'`          | say it as your reply; the orchestrator reads the pane          |
+| `tower state --json` (other lane's progress) | `git log <branch> --oneline`                              |
+
+The orchestrator then watches with watch-lanes.sh alone; idle after the final
+report is "done".
+
 ---
 
 You are {{LANE_NAME}} of a {{N}}-lane run. Working directory: {{WORKTREE}} (branch {{BRANCH}} — already a worktree; do NOT create another one, do NOT cd to any other checkout). {{FRESH_WORKTREE_LINE: "Dependencies are installed." | "First run: <install cmd>."}}

@@ -7,7 +7,8 @@
 # Task-level attention (blocked / stale / complete / closed) is tower's job:
 # run  tower wait --timeout 540 --stale 30  beside this. This script covers
 # what tower cannot see — the agent process itself: a lane whose session went
-# idle, done, blocked, or disappeared. Exit codes:
+# idle, done, blocked, or disappeared. Without tower installed this is the only
+# watch, and "done" is a lane going idle after its final report. Exit codes:
 #   0  a lane settled (idle/done/blocked/gone), or the run is complete/closed
 #   3  quiet round: everyone still working
 # Note: a lane waiting on its own background review subagent reads as "idle";
@@ -46,6 +47,10 @@ for name in "$@"; do
     herdr agent read "$name" --source recent-unwrapped --lines 40 2>/dev/null | grep -v '^\s*$' | tail -12 | sed 's/^/    │ /'
   fi
 done
-if finished; then echo "tower: run complete or closed"; alert=1; fi
-echo "--- tower"; tower state --json --run "$RUN_DIR" 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["summary"], "attention:", d["attention"])' 2>/dev/null || true
+if command -v tower >/dev/null; then
+  if finished; then echo "tower: run complete or closed"; alert=1; fi
+  echo "--- tower"; tower state --json --run "$RUN_DIR" 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["summary"], "attention:", d["attention"])' 2>/dev/null || true
+else
+  echo "--- no tower: task state is in git —"; git log --oneline --branches="*" -8 2>/dev/null | sed 's/^/    /'
+fi
 [ "$alert" = 1 ] && exit 0 || exit 3

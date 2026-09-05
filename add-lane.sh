@@ -6,7 +6,8 @@
 #
 # Worktrees live at <repo>/.worktrees/<branch>. Copies .env (gitignored) and
 # installs with the repo package manager. The worktree shares the repo's
-# common git dir, so `tower` inside it finds the same run with no flags.
+# common git dir, so `tower` inside it finds the same run with no flags. Works
+# without tower too: ownership is then recorded in <run-dir>/lanes.txt.
 set -euo pipefail
 test "${HERDR_ENV:-}" = 1 || { echo "not inside herdr" >&2; exit 1; }
 
@@ -17,8 +18,13 @@ WT="$REPO_ROOT/.worktrees/$BRANCH"
 NAME="$(basename "$REPO_ROOT")-lane-$(echo "$LANE" | tr 'A-Z' 'a-z')"
 EXECUTOR_MODEL="${EXECUTOR_MODEL:-claude-sonnet-5[1m]}"
 
-# Ownership first: tower refuses an unknown id, so a typo stops here, before a worktree exists.
-tower assign "$LANE" "$TASKS"
+# Ownership first: tower refuses an unknown id, so a typo stops here, before a
+# worktree exists. Without tower, ownership is a line in <run-dir>/lanes.txt.
+if command -v tower >/dev/null; then
+  HAVE_TOWER=1; tower assign "$LANE" "$TASKS"
+else
+  HAVE_TOWER=0; echo "$LANE=$TASKS" >> "$RUN_DIR/lanes.txt"
+fi
 
 out=$(herdr worktree create --cwd "$REPO_ROOT" --branch "$BRANCH" --base "$BASE" --path "$WT" --label "$NAME" --no-focus)
 WT_PANE=$(echo "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["root_pane"]["pane_id"])')
@@ -50,4 +56,8 @@ if ! out=$(start_agent 2>&1); then
 fi
 
 printf 'lane %s:         %s   (agent "%s", branch %s, worktree %s, model %s)\n' "$LANE" "$PANE" "$NAME" "$BRANCH" "$WT" "$EXECUTOR_MODEL" >> "$RUN_DIR/panes.txt"
-echo "lane $LANE ready: agent $NAME in $PANE — next:  tower brief $LANE  (+ merge points), then  herdr agent prompt $NAME \"<brief>\""
+if [ "$HAVE_TOWER" = 1 ]; then
+  echo "lane $LANE ready: agent $NAME in $PANE — next:  tower brief $LANE  (+ merge points), then  herdr agent prompt $NAME \"<brief>\""
+else
+  echo "lane $LANE ready: agent $NAME in $PANE — next: write brief-$LANE.md from brief-template.md (\"Without tower\"; tasks $TASKS, + merge points), then  herdr agent prompt $NAME \"<brief>\""
+fi
