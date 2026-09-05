@@ -6,7 +6,10 @@
 #
 # Run it FROM the main Claude pane (the orchestrator), inside the repo checkout
 # on the feature branch, with HERDR_ENV=1. It:
-#   1. `tower init` from the plan (or a TSV), into <run-dir>; every task goes
+#   1. `tower init` from the plan (or a TSV), into <run-dir> (pass a path under
+#      ~/.local/state/tower/runs/ to keep it with tower's own runs), with the
+#      role models implementer=$EXECUTOR_MODEL, spec-reviewer=$SPEC_REVIEWER_MODEL
+#      (sonnet), quality-reviewer=$QUALITY_REVIEWER_MODEL (opus); every task goes
 #      to lane A unless LANES="A=1-4 B=5,6" is set in the environment,
 #   2. splits the layout below and starts the lane-A executor (claude, on
 #      EXECUTOR_MODEL — default claude-sonnet-5[1m]; never the CLI default),
