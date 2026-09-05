@@ -32,6 +32,9 @@ KIT="$(cd "$(dirname "$0")" && pwd)"
 REPO="$PWD"
 EXECUTOR="${EXECUTOR_NAME:-$(basename "$REPO")-executor}"
 EXECUTOR_MODEL="${EXECUTOR_MODEL:-claude-sonnet-5[1m]}"
+# The role → model map tower records in run.json and prints in every brief.
+SPEC_REVIEWER_MODEL="${SPEC_REVIEWER_MODEL:-sonnet}"
+QUALITY_REVIEWER_MODEL="${QUALITY_REVIEWER_MODEL:-opus}"
 TEST_PKG="${TEST_PKG:-.}"
 STALE="${STALE:-30}"
 
@@ -40,9 +43,10 @@ TEST_CMD_RESOLVED="$( cd "$REPO/$TEST_PKG" 2>/dev/null || cd "$REPO"; herdr_defa
 
 # --- the run ------------------------------------------------------------------
 mkdir -p "$RUN_DIR"
+MODELS=(--model "implementer=$EXECUTOR_MODEL" --model "spec-reviewer=$SPEC_REVIEWER_MODEL" --model "quality-reviewer=$QUALITY_REVIEWER_MODEL")
 case "$SOURCE" in
-  *.md) tower init --plan "$SOURCE" --title "$PLAN" --run "$RUN_DIR" ;;
-  *)    tower init --tasks "$SOURCE" --title "$PLAN" --run "$RUN_DIR" ;;
+  *.md) tower init --plan "$SOURCE" --title "$PLAN" --run "$RUN_DIR" "${MODELS[@]}" ;;
+  *)    tower init --tasks "$SOURCE" --title "$PLAN" --run "$RUN_DIR" "${MODELS[@]}" ;;
 esac
 if [ -n "${LANES:-}" ]; then
   for spec in $LANES; do tower assign "${spec%%=*}" "${spec#*=}"; done
