@@ -2,7 +2,7 @@
 # One round of process-level watching, meant to run in the background from the
 # orchestrator (run_in_background) and be re-run after each exit.
 #
-#   watch-lanes.sh <run-dir> <agent-name>...            # env: ROUND_SECONDS (default 540)
+#   watch-lanes.sh <run-dir> <agent-name>...            # env: ROUND_SECONDS (default 540), GRACE_SECONDS (default 45)
 #
 # Task-level attention (blocked / stale / complete / closed) is tower's job:
 # run  tower wait --timeout 540 --stale 30  beside this. This script covers
@@ -11,10 +11,13 @@
 #   0  a lane settled (idle/done/blocked/gone), or the run is complete/closed
 #   3  quiet round: everyone still working
 # Note: a lane waiting on its own background review subagent reads as "idle";
-# check the pane tail this prints before acting.
+# check the pane tail this prints before acting. A lane that has just been
+# prompted also reads as idle for a moment, so idle is ignored for the first
+# GRACE_SECONDS of a round — start this right after `herdr agent prompt`.
 set -uo pipefail
 RUN_DIR="$1"; shift
 ROUND=${ROUND_SECONDS:-540}
+GRACE=${GRACE_SECONDS:-45}
 
 state_of() { herdr agent get "$1" 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["agent"]["agent_status"])' 2>/dev/null || echo gone; }
 finished() { tower state --json --run "$RUN_DIR" 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d["summary"]["complete"] or d["closed"] else 1)' 2>/dev/null; }
@@ -23,7 +26,11 @@ started=$(date +%s)
 while [ $(( $(date +%s) - started )) -lt "$ROUND" ]; do
   settled=0
   for name in "$@"; do
-    case "$(state_of "$name")" in working|unknown) ;; *) settled=1 ;; esac
+    case "$(state_of "$name")" in
+      working|unknown) ;;
+      idle) [ $(( $(date +%s) - started )) -ge "$GRACE" ] && settled=1 ;;
+      *) settled=1 ;;
+    esac
   done
   [ "$settled" = 1 ] && break
   finished && break
