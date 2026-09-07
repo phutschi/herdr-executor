@@ -156,6 +156,15 @@ if section bootstrap; then
   assert_match "dev: checks pane runs make watch"       "$log" "^herdr pane run pane-3 cd '$r/.' && make watch$"
   assert_match "dev: pane map has dev, checks, console" "$(cat "$RUN/panes.txt")" '^dev: +pane-1 '
   assert_match "dev: console is pane-4"                 "$(cat "$RUN/panes.txt")" '^console: +pane-4 '
+
+  # Lane A runs where bootstrap is run from, which is often a herdr worktree
+  # of the checkout, not the main checkout repo_root() resolves to.
+  r=$(fixture_repo bun-vitest); wt="$TMP/repos/bun-vitest-wt"
+  git -C "$r" worktree add -q "$wt" -b wt-branch
+  RUN="$TMP/run-worktree"; reset_stub
+  boot "$wt" "$RUN" "Worktree" wt-branch >/dev/null
+  assert_match "worktree: lane A checkout is where bootstrap ran, not repo_root" "$(cat "$RUN/panes.txt")" '^lane A: +pane-2 +\(agent "[^"]+", kind claude, branch wt-branch, checkout '"$wt"', model '
+  assert_match "worktree: checks pane cds into the worktree"  "$(cat "$HERDR_STUB_LOG")" "^herdr pane run pane-1 cd '$wt/.' && "
 fi
 
 # --- add-lane ----------------------------------------------------------------

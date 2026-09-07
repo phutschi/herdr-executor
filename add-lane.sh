@@ -17,9 +17,8 @@
 # inside it finds the run with no flags. Without tower, ownership goes to
 # <run-dir>/lanes.txt.
 #
-# Never run this by hand to see what it does — it drives a real herdr, there
-# is no DRY_RUN preview for it outside a test. Exercise it only through
-# ./test.sh (section "add-lane"), which drives it entirely against the stubs.
+# Never run this for real to see what it does; use DRY_RUN=1, which answers
+# every herdr and tower call from tests/stub and touches nothing.
 set -euo pipefail
 KIT="$(cd "$(dirname "$0")" && pwd)"
 . "$KIT/common.sh"
