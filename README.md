@@ -20,7 +20,7 @@ and codex optional) and links the kit into `~/.claude/skills` and
 `~/.agents/skills` as the `herdr-orchestrate` skill. `install.sh --check`
 only checks.
 
-## Two ways to start
+## Two openings
 
 From a herdr pane, in your repo, on the feature branch:
 
@@ -29,12 +29,13 @@ From a herdr pane, in your repo, on the feature branch:
   (`id<TAB>title<TAB>area`, see `example-tasks.tsv`). Keep plans wherever
   you like; the kit only takes the path.
 - **Without.** "Spin up herdr-orchestrate." The layout comes up, the
-  orchestrator reports the pane map, and your next message is the work. It
-  derives the task list, puts it on the board, and briefs the lanes. Say
-  "two lanes" or "ask me before you brief" if you want that.
+  orchestrator reports the pane map (`panes.txt` in the run dir), and your
+  next message is the work. It derives the task list, puts it on the board,
+  and briefs the lanes. Say "two lanes" or "ask me before you brief" if you
+  want that.
 
-Either way the orchestrator briefs nobody until the task list is on the
-board.
+Either way, the orchestrator briefs nobody until the task list is on the
+board — the gate.
 
 ## The layout
 
@@ -53,13 +54,15 @@ One tab:
 - **Lanes** are the executors. Lane A works in your checkout on the feature
   branch (the integration branch); B to D get worktrees under `.worktrees/`.
   The grid grows one lane at a time: B right of A, C under A, D under B.
-  Four at most.
+  Four at most. A lane that needs another lane's work merges it at its own
+  merge point; a *finished* lane is merged into the integration branch by
+  the orchestrator, right away — never by lane A.
 - **checks** runs your test runner in watch mode, **dev** your development
   server if you declare one. Both run in lane A's checkout.
 - **console** is tower's live board, the record of the run. It stays open
   after the run; you quit it with `q`. Without tower it shows the git log,
-  and the run dir holds the record. The bottom row always spans the full
-  width so console keeps its 60 columns.
+  and the run dir holds the record. Console is tower's minimum width, 60
+  columns; the bottom row always spans the full tab so it always gets them.
 
 Nothing is closed until you say so.
 
@@ -76,7 +79,7 @@ pane checks "make test-watch"     # pane NAME "COMMAND" [DIR]; NAME is checks or
 pane dev    "make dev" web
 ```
 
-## Executors
+## Executor kinds
 
 Lanes run Claude Code by default (`claude-sonnet-5[1m]`). A lane can run
 codex instead: `EXECUTOR_KIND=codex` for that bootstrap or add-lane call
