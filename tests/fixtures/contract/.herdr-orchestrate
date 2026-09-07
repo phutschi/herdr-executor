@@ -1,0 +1,3 @@
+CHECK_CMD="make check"
+pane checks "make watch"
+pane dev    "make dev" web
