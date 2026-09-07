@@ -55,15 +55,27 @@ while [ $(( $(date +%s) - started )) -lt "$ROUND" ]; do
   sleep "$POLL"
 done
 
-alert=0
+alert=0; i=0
+# idle only settles at IDLE_SEEN>=2 (the polling loop above); reporting it on
+# a single fresh sample here would let a lane idle for its very first poll
+# report attention just because a *different* lane is what broke the loop.
 for name in "$@"; do
   state=$(state_of "$name")
-  case "$state" in blocked|idle|done|gone) alert=1; echo "attention: $name $(reason_for "$name" "$state")" ;; esac
+  case "$state" in
+    idle) [ "${IDLE_SEEN[$i]}" -ge 2 ] && { alert=1; echo "attention: $name $(reason_for "$name" "$state")"; } ;;
+    blocked|done|gone) alert=1; echo "attention: $name $(reason_for "$name" "$state")" ;;
+  esac
+  i=$((i+1))
 done
+i=0
 for name in "$@"; do
   state=$(state_of "$name")
   printf '%-22s %s\n' "$name" "$state"
-  case "$state" in blocked|idle|done) tail_of "$name" | sed 's/^/    │ /' ;; esac
+  case "$state" in
+    blocked|done) tail_of "$name" | sed 's/^/    │ /' ;;
+    idle) [ "${IDLE_SEEN[$i]}" -ge 2 ] && tail_of "$name" | sed 's/^/    │ /' ;;
+  esac
+  i=$((i+1))
 done
 if tower_ok; then
   if finished; then echo "tower: run complete or closed"; alert=1; fi
