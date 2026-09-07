@@ -214,5 +214,30 @@ if section watch; then
   assert_match "no tower: git log instead"            "$out" 'no tower: task state is in git'
 fi
 
+# --- install -----------------------------------------------------------------
+if section install; then
+  H="$TMP/home"; mkdir -p "$H"
+  out=$(HOME="$H" "$KIT/install.sh" 2>&1; echo "exit=$?")
+  assert_match "install: exit 0"                      "$out" 'exit=0$'
+  assert_eq "install: ~/.claude/skills link"          "$(readlink "$H/.claude/skills/herdr-orchestrate")" "$KIT"
+  assert_eq "install: ~/.agents/skills link"          "$(readlink "$H/.agents/skills/herdr-orchestrate")" "$KIT"
+  assert_match "install: lists herdr as ok (stub)"    "$out" 'ok +herdr'
+  assert_match "install: tower optional"              "$out" 'tower'
+  assert_match "install: prints the two openings"     "$out" 'with a plan'
+  out=$(HOME="$H" "$KIT/install.sh" 2>&1; echo "exit=$?")
+  assert_match "install: idempotent"                  "$out" 'exit=0$'
+  H2="$TMP/home2"; mkdir -p "$H2"
+  out=$(HOME="$H2" "$KIT/install.sh" --check 2>&1; echo "exit=$?")
+  assert_match "check: exit 0"                        "$out" 'exit=0$'
+  [ -e "$H2/.claude/skills/herdr-orchestrate" ] && bad "check: links nothing" || ok "check: links nothing"
+  # A PATH with everything the script needs except node.
+  B="$TMP/bin"; mkdir -p "$B"; for t in git bash python3 dirname sed readlink mkdir ln cat tr grep; do ln -sf "$(command -v $t)" "$B/$t"; done
+  out=$(HOME="$H2" PATH="$KIT/tests/stub:$B" "$KIT/install.sh" --check 2>&1; echo "exit=$?")
+  assert_match "check: a missing dependency is named"  "$out" 'MISSING +node'
+  assert_match "check: a missing dependency fails"     "$out" 'exit=1$'
+  out=$(HOME="$H2" TOWER_STUB=old "$KIT/install.sh" --check 2>&1)
+  assert_match "check: an old tower is called out"    "$out" 'OLD +tower'
+fi
+
 echo; echo "$pass passed, $fail failed"
 [ "$fail" = 0 ]
