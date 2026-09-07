@@ -10,7 +10,7 @@
 #           writable: the run dir (tower task|block|note append to it) and the
 #           repo's common git dir (a lane worktree commits into it).
 #
-# Expects `set -u`; provides start_agent NAME PANE and
+# Expects `set -u`; provides agent_name SUFFIX, start_agent NAME PANE and
 # start_agent_with_trust_retry NAME PANE.
 
 EXECUTOR_KIND="${EXECUTOR_KIND:-claude}"
@@ -34,6 +34,19 @@ info: ~/.codex/skills/tdd is missing — the codex lane cannot load the tdd skil
         ln -s $S/code-review ~/.codex/skills/code-review
 MSG
 fi
+
+# An agent name herdr accepts: a lowercase letter first, then lowercase letters,
+# digits, '-' or '_', at most 32 characters. Built from the repo's name (the main
+# checkout's, so a lane or a worktree checkout does not lengthen it) plus the
+# suffix; the repo part is truncated to keep the suffix whole.
+agent_name() {
+  local suffix="$1" repo
+  repo="$(basename "$(git rev-parse --path-format=absolute --git-common-dir | sed 's#/\.git$##')")"
+  repo="$(printf '%s' "$repo" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9_-]/-/g; s/^[^a-z]*//')"
+  [ -n "$repo" ] || repo=repo
+  repo="${repo:0:$(( 32 - ${#suffix} ))}"
+  printf '%s%s' "${repo%-}" "$suffix"
+}
 
 start_agent() {
   local name="$1" pane="$2"

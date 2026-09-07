@@ -17,8 +17,8 @@ RUN_DIR="$1"; LANE="$2"; BRANCH="$3"; BASE="$4"; TASKS="$5"
 KIT="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(git rev-parse --path-format=absolute --git-common-dir | sed 's#/\.git$##')"
 WT="$REPO_ROOT/.worktrees/$BRANCH"
-NAME="$(basename "$REPO_ROOT")-lane-$(echo "$LANE" | tr 'A-Z' 'a-z')"
-. "$KIT/executor.sh"   # EXECUTOR_KIND, EXECUTOR_MODEL, start_agent*
+. "$KIT/executor.sh"   # EXECUTOR_KIND, EXECUTOR_MODEL, agent_name, start_agent*
+NAME="$(agent_name "-lane-$(echo "$LANE" | tr 'A-Z' 'a-z')")"
 
 # Ownership first: tower refuses an unknown id, so a typo stops here, before a
 # worktree exists. Without tower, ownership is a line in <run-dir>/lanes.txt.

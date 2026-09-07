@@ -18,7 +18,10 @@
 #   2. splits the layout below and starts the lane-A executor: EXECUTOR_KIND
 #      (claude, default, or codex) on EXECUTOR_MODEL (claude-sonnet-5[1m] or
 #      gpt-6-astra by default; never the CLI default) — see executor.sh. Lanes
-#      may differ: EXECUTOR_KIND=codex add-lane.sh … B … next to a claude lane A,
+#      may differ: EXECUTOR_KIND=codex add-lane.sh … B … next to a claude lane A.
+#      The agent is named <repo>-executor after the main checkout's directory,
+#      normalised and truncated to herdr's 32-character limit (EXECUTOR_NAME
+#      overrides; lanes are <repo>-lane-<x>, see agent_name in executor.sh),
 #   3. opens the tower console in the pane the git log used to occupy
 #      (GITLOG=1 keeps a git log pane beside it).
 #
@@ -55,8 +58,8 @@ fi
 RUN_DIR="$1"; PLAN="$2"; BRANCH="$3"; SOURCE="$4"; TEST_FILTER="${5:-src}"
 KIT="$(cd "$(dirname "$0")" && pwd)"
 REPO="$PWD"
-EXECUTOR="${EXECUTOR_NAME:-$(basename "$REPO")-executor}"
-. "$KIT/executor.sh"   # EXECUTOR_KIND, EXECUTOR_MODEL, start_agent*
+. "$KIT/executor.sh"   # EXECUTOR_KIND, EXECUTOR_MODEL, agent_name, start_agent*
+EXECUTOR="${EXECUTOR_NAME:-$(agent_name -executor)}"
 # The role → model map tower records in run.json and prints in every brief.
 SPEC_REVIEWER_MODEL="${SPEC_REVIEWER_MODEL:-sonnet}"
 QUALITY_REVIEWER_MODEL="${QUALITY_REVIEWER_MODEL:-opus}"
