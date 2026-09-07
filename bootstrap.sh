@@ -34,6 +34,10 @@
 # with the next step. The console pane stays open after the run: it is the
 # record, and the human quits it with q. Nothing is torn down until the user
 # says so.
+#
+# Never run this by hand to see what it does — it drives a real herdr, there
+# is no DRY_RUN preview for it outside a test. Exercise it only through
+# ./test.sh (section "bootstrap"), which drives it entirely against the stubs.
 set -euo pipefail
 KIT="$(cd "$(dirname "$0")" && pwd)"
 . "$KIT/common.sh"
@@ -42,7 +46,7 @@ in_herdr; need git python3 node
 RUN_DIR="$1"; TITLE="$2"; BRANCH="$3"; SOURCE="${4:-}"
 [ -z "$SOURCE" ] || [ -f "$SOURCE" ] || die "no such plan or task file: $SOURCE"
 [ -z "${LANES:-}" ] || [ -n "$SOURCE" ] || die 'LANES needs a plan or task file; in the empty opening assign lanes with  tower add "<title>" --lane <X>'
-REPO="$PWD"
+REPO="$(repo_root)"
 
 HAVE_TOWER=1
 tower_ok || case $? in

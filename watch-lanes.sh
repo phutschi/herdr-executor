@@ -20,9 +20,15 @@
 # GRACE_SECONDS and only when seen on two consecutive polls, and the reason
 # says whether the pane tail shows the brief's final report (ALL DONE, ready
 # to merge) or not.
+#
+# Never run this by hand to see what it does — it polls a real agent through a
+# real herdr, there is no DRY_RUN preview for it. Exercise it only through
+# ./test.sh (section "watch"), which drives it entirely against the stubs.
 set -uo pipefail
 KIT="$(cd "$(dirname "$0")" && pwd)"
 . "$KIT/common.sh"
+in_herdr; need python3
+[ $# -ge 2 ] || die 'usage: watch-lanes.sh <run-dir> <agent-name>...'
 RUN_DIR="$1"; shift
 ROUND=${ROUND_SECONDS:-540}; GRACE=${GRACE_SECONDS:-45}; POLL=${POLL_SECONDS:-15}
 

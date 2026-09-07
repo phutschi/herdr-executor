@@ -16,6 +16,10 @@
 # manager installs. The worktree shares the repo's common git dir, so `tower`
 # inside it finds the run with no flags. Without tower, ownership goes to
 # <run-dir>/lanes.txt.
+#
+# Never run this by hand to see what it does — it drives a real herdr, there
+# is no DRY_RUN preview for it outside a test. Exercise it only through
+# ./test.sh (section "add-lane"), which drives it entirely against the stubs.
 set -euo pipefail
 KIT="$(cd "$(dirname "$0")" && pwd)"
 . "$KIT/common.sh"
