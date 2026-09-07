@@ -56,7 +56,8 @@ layout comes up with the git log in the console pane.
 - Never close panes you did not create; never close the tower pane.
 - Executors never push and never open a PR. The brief says so; keep it.
 - The brief's review tail matches the lane's kind (panes.txt): review subagents
-  for claude, `/review` for codex. See brief-template.md, "Executor kind".
+  for claude, self-review with the code-review skill for codex. See
+  brief-template.md, "Executor kind".
 
 ## Common mistakes
 
@@ -68,4 +69,4 @@ layout comes up with the git log in the console pane.
 | Sleeping and re-reading panes | The two watches in `run_in_background`; act only when one exits |
 | Closing the tower pane during teardown | It stays; it is the record |
 | A second run in a repo with an open one | tower refuses; `tower close` the old one first |
-| Briefing a codex lane with subagent review instructions | Codex has no subagents; its tail is `/review` per task and once for the lane |
+| Briefing a codex lane with subagent review instructions | Codex has no subagents; it reviews its own diff with the code-review skill, per task and once for the lane |
