@@ -47,7 +47,8 @@ RUN_DIR="$1"; TITLE="$2"; BRANCH="$3"; SOURCE="${4:-}"
 [ -z "${LANES:-}" ] || [ -n "$SOURCE" ] || die 'LANES needs a plan or task file; in the empty opening assign lanes with  tower add "<title>" --lane <X>'
 # Lane A, checks, and dev all belong in the directory bootstrap runs in, which
 # is often a herdr worktree of the checkout, not repo_root() (that resolves to
-# the main checkout, and is for agent_name and add-lane's worktree location).
+# the main checkout — the same resolution agent_name inlines for naming, and
+# what add-lane.sh uses for the worktree location of lanes B-D).
 REPO="$PWD"
 
 HAVE_TOWER=1
