@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Add a parallel lane: a git worktree with its own claude executor, placed in
-# tab 1 to the right of the previous lane, owning the given task ids in tower.
+# Add a parallel lane: a git worktree with its own executor, placed in tab 1 to
+# the right of the previous lane, owning the given task ids in tower.
 #
-#   add-lane.sh <run-dir> <lane-letter> <branch> <base-branch> <task-ids>
+#   [EXECUTOR_KIND=claude|codex] add-lane.sh <run-dir> <lane-letter> <branch> <base-branch> <task-ids>
 #
+# The kind is per lane (default claude; EXECUTOR_MODEL overrides the kind's
+# default model — see executor.sh), so a codex lane B can run beside a claude lane A.
 # Worktrees live at <repo>/.worktrees/<branch>. Copies .env (gitignored) and
 # installs with the repo package manager. The worktree shares the repo's
 # common git dir, so `tower` inside it finds the same run with no flags. Works
@@ -16,7 +18,7 @@ KIT="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(git rev-parse --path-format=absolute --git-common-dir | sed 's#/\.git$##')"
 WT="$REPO_ROOT/.worktrees/$BRANCH"
 NAME="$(basename "$REPO_ROOT")-lane-$(echo "$LANE" | tr 'A-Z' 'a-z')"
-EXECUTOR_MODEL="${EXECUTOR_MODEL:-claude-sonnet-5[1m]}"
+. "$KIT/executor.sh"   # EXECUTOR_KIND, EXECUTOR_MODEL, start_agent*
 
 # Ownership first: tower refuses an unknown id, so a typo stops here, before a
 # worktree exists. Without tower, ownership is a line in <run-dir>/lanes.txt.
@@ -45,17 +47,9 @@ herdr pane run "$PANE" "cd '$WT' && $INSTALL_CMD; echo HERDR_INSTALL_'DONE'"
 herdr pane wait-output "$PANE" --source recent-unwrapped --regex '^HERDR_INSTALL_DONE$' --timeout 300000 >/dev/null \
   || echo "add-lane: install did not finish in 5 min; starting the agent anyway" >&2
 
-start_agent() { herdr agent start "$NAME" --kind claude --pane "$PANE" -- --model "$EXECUTOR_MODEL"; }
-if ! out=$(start_agent 2>&1); then
-  if echo "$out" | grep -q "blocked during startup"; then
-    herdr pane send-keys "$PANE" Down Enter >/dev/null; sleep 3
-    herdr agent get "$NAME" >/dev/null 2>&1 || start_agent >/dev/null
-  else
-    echo "$out" >&2; exit 1
-  fi
-fi
+start_agent_with_trust_retry "$NAME" "$PANE"
 
-printf 'lane %s:         %s   (agent "%s", branch %s, worktree %s, model %s)\n' "$LANE" "$PANE" "$NAME" "$BRANCH" "$WT" "$EXECUTOR_MODEL" >> "$RUN_DIR/panes.txt"
+printf 'lane %s:         %s   (agent "%s", kind %s, branch %s, worktree %s, model %s)\n' "$LANE" "$PANE" "$NAME" "$EXECUTOR_KIND" "$BRANCH" "$WT" "$EXECUTOR_MODEL" >> "$RUN_DIR/panes.txt"
 if [ "$HAVE_TOWER" = 1 ]; then
   echo "lane $LANE ready: agent $NAME in $PANE — next:  tower brief $LANE  (+ merge points), then  herdr agent prompt $NAME \"<brief>\""
 else

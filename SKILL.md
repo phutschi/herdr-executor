@@ -21,7 +21,10 @@ layout comes up with the git log in the console pane.
 1. **Prepare.** From the repo checkout on the feature branch, with a plan
    (markdown with task headings, or a TSV like `example-tasks.tsv`). Pick a run
    dir under `~/.local/state/tower/runs/<name>`. For parallel lanes set
-   `LANES="A=1-4 B=5,6"` in the environment.
+   `LANES="A=1-4 B=5,6"` in the environment. Each lane runs on claude unless
+   `EXECUTOR_KIND=codex` is set for its bootstrap or add-lane call (default
+   models `claude-sonnet-5[1m]` and `gpt-6-astra`; `EXECUTOR_MODEL` overrides).
+   A claude lane A and a codex lane B in one run is fine.
 2. **Bootstrap.**
    ```
    <kit>/bootstrap.sh <run-dir> "<title>" <branch> <plan.md|tasks.tsv> [test-filter]
@@ -52,6 +55,8 @@ layout comes up with the git log in the console pane.
 - `tower note` is your voice on the board: merges, escalations, decisions.
 - Never close panes you did not create; never close the tower pane.
 - Executors never push and never open a PR. The brief says so; keep it.
+- The brief's review tail matches the lane's kind (panes.txt): review subagents
+  for claude, `/review` for codex. See brief-template.md, "Executor kind".
 
 ## Common mistakes
 
@@ -63,3 +68,4 @@ layout comes up with the git log in the console pane.
 | Sleeping and re-reading panes | The two watches in `run_in_background`; act only when one exits |
 | Closing the tower pane during teardown | It stays; it is the record |
 | A second run in a repo with an open one | tower refuses; `tower close` the old one first |
+| Briefing a codex lane with subagent review instructions | Codex has no subagents; its tail is `/review` per task and once for the lane |

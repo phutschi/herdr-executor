@@ -15,8 +15,10 @@
 #      role models implementer=$EXECUTOR_MODEL, spec-reviewer=$SPEC_REVIEWER_MODEL
 #      (sonnet), quality-reviewer=$QUALITY_REVIEWER_MODEL (opus); every task goes
 #      to lane A unless LANES="A=1-4 B=5,6" is set in the environment,
-#   2. splits the layout below and starts the lane-A executor (claude, on
-#      EXECUTOR_MODEL — default claude-sonnet-5[1m]; never the CLI default),
+#   2. splits the layout below and starts the lane-A executor: EXECUTOR_KIND
+#      (claude, default, or codex) on EXECUTOR_MODEL (claude-sonnet-5[1m] or
+#      gpt-6-astra by default; never the CLI default) — see executor.sh. Lanes
+#      may differ: EXECUTOR_KIND=codex add-lane.sh … B … next to a claude lane A,
 #   3. opens the tower console in the pane the git log used to occupy
 #      (GITLOG=1 keeps a git log pane beside it).
 #
@@ -54,7 +56,7 @@ RUN_DIR="$1"; PLAN="$2"; BRANCH="$3"; SOURCE="$4"; TEST_FILTER="${5:-src}"
 KIT="$(cd "$(dirname "$0")" && pwd)"
 REPO="$PWD"
 EXECUTOR="${EXECUTOR_NAME:-$(basename "$REPO")-executor}"
-EXECUTOR_MODEL="${EXECUTOR_MODEL:-claude-sonnet-5[1m]}"
+. "$KIT/executor.sh"   # EXECUTOR_KIND, EXECUTOR_MODEL, start_agent*
 # The role → model map tower records in run.json and prints in every brief.
 SPEC_REVIEWER_MODEL="${SPEC_REVIEWER_MODEL:-sonnet}"
 QUALITY_REVIEWER_MODEL="${QUALITY_REVIEWER_MODEL:-opus}"
@@ -87,7 +89,7 @@ title:            $PLAN
 repo:             $REPO
 branch:           $BRANCH
 plan:             $RUN_DIR/$(basename "$SOURCE" | sed 's/.*\.md$/plan.md/; s/.*\.tsv$/tasks.tsv/')
-implementer:      $EXECUTOR_MODEL
+implementer:      $EXECUTOR_MODEL ($EXECUTOR_KIND)
 spec-reviewer:    $SPEC_REVIEWER_MODEL
 quality-reviewer: $QUALITY_REVIEWER_MODEL
 TXT
@@ -118,7 +120,7 @@ fi
 cat > "$RUN_DIR/panes.txt" <<TXT
 run dir:        $RUN_DIR
 orchestrator:   $HERDR_PANE_ID
-executor:       $EXEC_PANE   (agent "$EXECUTOR", branch $BRANCH, model $EXECUTOR_MODEL)
+executor:       $EXEC_PANE   (agent "$EXECUTOR", kind $EXECUTOR_KIND, branch $BRANCH, model $EXECUTOR_MODEL)
 toolchain:      $PM (typecheck task: $TYPECHECK_TASK)
 typecheck:      $TYPECHECK_PANE   ($TYPECHECK_CMD)
                 -> herdr pane read $TYPECHECK_PANE --source recent-unwrapped --lines 60
@@ -135,17 +137,7 @@ T2
 fi )
 TXT
 
-# The agent. A fresh checkout shows claude's trust prompt, which herdr reports
-# as "blocked during startup": answer it and try once more.
-start_agent() { herdr agent start "$EXECUTOR" --kind claude --pane "$EXEC_PANE" -- --model "$EXECUTOR_MODEL"; }
-if ! out=$(start_agent 2>&1); then
-  if echo "$out" | grep -q "blocked during startup"; then
-    herdr pane send-keys "$EXEC_PANE" Down Enter >/dev/null; sleep 3
-    herdr agent get "$EXECUTOR" >/dev/null 2>&1 || start_agent >/dev/null
-  else
-    echo "$out" >&2; exit 1
-  fi
-fi
+start_agent_with_trust_retry "$EXECUTOR" "$EXEC_PANE"
 
 cat "$RUN_DIR/panes.txt"
 echo
