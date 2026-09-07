@@ -42,15 +42,19 @@ and do it in a lane anyway or suggest doing it without the kit.
    ```
    With a source, every task goes to lane A unless `LANES="A=1-4 B=5,6"` is
    set. It builds the layout, starts lane A's executor and writes
-   `<run-dir>/panes.txt`, the pane map for the whole run. Read it.
+   `<run-dir>/panes.txt`, the pane map for the whole run. Read it: it also
+   carries the check gate every lane runs before a commit, on its
+   `check gate:` line.
 3. **The task list.** With a source it is loaded. Without: one
    `tower add "<title>" --area <area> --lane <X>` per task (no tower: append
    to `tasks.tsv` and `lanes.txt`). Group by area and dependency: one lane per
    independent area, at most four; a dependency between lanes is a merge
    point, not a reason to share a lane. The user's message may name the lane
    count.
-4. **Lanes B to D.** `add-lane.sh <run-dir> B <branch> <base> <ids>`; the pane
-   goes into the grid (B right of A, C under A, D under B).
+4. **Lanes B to D.** `add-lane.sh <run-dir> B <branch> <base> <ids>` (`<branch>`
+   is the lane's own branch, `<base>` the integration branch it forks from);
+   the lane gets a worktree under `.worktrees/`, and the pane goes into the
+   grid (B right of A, C under A, D under B).
 5. **Brief.** Per lane: `tower brief <X> > <run-dir>/brief-<X>.md`, then add
    the judgement from `brief-template.md` above it (method, other lanes,
    merge points, the boundary sentence, the review tail for the lane's kind).
@@ -59,12 +63,14 @@ and do it in a lane anyway or suggest doing it without the kit.
 6. **Watch, in the background.** `tower wait --timeout 540 --stale 30` for
    task-level attention, and `watch-lanes.sh <run-dir> <agent>...` for the
    processes. Both exit when something needs you; re-run them after acting.
-   Never poll `tower state` or the panes in a loop.
+   Never poll `tower state` or the panes in a loop. Without tower, watch with
+   `watch-lanes.sh` alone; idle after the final report is done.
 7. **Act on attention.** `blocked` → decide, then re-brief with what the lane
    asked for (a discovered task: you add it, then tell the lane). `stale` or
-   `idle-unexplained` → read the pane tail, then re-brief or wait.
-   `idle-after-final-report` or `done` on lane B–D → verify its check gate and
-   commits, merge its branch into the integration branch yourself, note it
+   `idle-unexplained` → read the pane tail, then re-brief or wait. A lane
+   B–D reporting `idle-after-final-report`, `done`, or a `tower note … ready
+   to merge` → verify its check gate and commits, merge its branch into the
+   integration branch yourself, note it
    (`tower note --lane <X> 'merged into <branch>'`), tell lane A if it was
    waiting. On lane A → verify the check gate and the commits; the run is done.
 8. **Close.** `tower close "<how it ended>"` (no tower: a line in
