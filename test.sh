@@ -17,6 +17,11 @@ section() { [ -z "$ONLY" ] || [ "$ONLY" = "$1" ]; }
 
 TMP=$(cd "$(mktemp -d)" && pwd -P); trap 'rm -rf "$TMP"' EXIT
 export DRY_RUN=1 HERDR_STUB_LOG="$TMP/log" HERDR_STUB_COUNTER="$TMP/counter" HERDR_STUB_STATES_DIR="$TMP/states"
+# common.sh only defaults HERDR_PANE_ID/HERDR_TAB_ID when unset, so running
+# test.sh from inside a real herdr pane (as its own agent does) would
+# otherwise leak this pane's real ids into every assertion instead of the
+# pane-0/tab-0 the plan's assertions expect.
+unset HERDR_PANE_ID HERDR_TAB_ID
 mkdir -p "$HERDR_STUB_STATES_DIR"
 
 # Guard: every section below runs herdr/tower calls through common.sh's
@@ -151,6 +156,36 @@ if section bootstrap; then
   assert_match "dev: checks pane runs make watch"       "$log" "^herdr pane run pane-3 cd '$r/.' && make watch$"
   assert_match "dev: pane map has dev, checks, console" "$(cat "$RUN/panes.txt")" '^dev: +pane-1 '
   assert_match "dev: console is pane-4"                 "$(cat "$RUN/panes.txt")" '^console: +pane-4 '
+fi
+
+# --- add-lane ----------------------------------------------------------------
+if section add-lane; then
+  r=$(fixture_repo bun-vitest); RUN="$TMP/run-grid"; reset_stub
+  (cd "$r" && "$KIT/bootstrap.sh" "$RUN" "Grid" main "$KIT/example-tasks.tsv" >/dev/null 2>&1)
+  lane() { (cd "$r" && "$KIT/add-lane.sh" "$RUN" "$@" 2>&1); }
+  reset_stub; out=$(lane B feat/b main 2,3); log=$(cat "$HERDR_STUB_LOG")
+  assert_match "B: ownership first"                   "$log" '^tower assign B 2,3$'
+  assert_match "B: worktree under .worktrees"         "$log" "^herdr worktree create --cwd $r --branch feat/b --base main --path $r/.worktrees/feat/b --label bun-vitest-lane-b --no-focus$"
+  assert_match "B: placed right of lane A"            "$log" '^herdr pane move pane-[0-9]+ --tab tab-0 --split right --target-pane pane-2 --ratio 0.5 --no-focus$'
+  assert_match "B: install then agent start"          "$log" '^herdr agent start bun-vitest-lane-b --kind claude --pane '
+  assert_match "B: pane map line"                     "$(cat "$RUN/panes.txt")" '^lane B: +pane-[0-9]+ +\(agent "bun-vitest-lane-b", kind claude, branch feat/b, checkout '"$r"'/.worktrees/feat/b, model '
+  assert_match "B: prints the next step"              "$out" 'lane B ready'
+  reset_stub; out=$(lane C feat/c main 4)
+  assert_match "C: placed under lane A"               "$(cat "$HERDR_STUB_LOG")" '--split down --target-pane pane-2 '
+  bpane=$(sed -nE 's/^lane B: +([^ ]+).*/\1/p' "$RUN/panes.txt")
+  reset_stub; out=$(lane D feat/d main 5)
+  assert_match "D: placed under lane B"               "$(cat "$HERDR_STUB_LOG")" "--split down --target-pane $bpane "
+  assert_match "E: refused, four lanes at most"       "$(lane E feat/e main 6)" 'B, C or D'
+  assert_match "A: refused, bootstrap starts it"      "$(lane A feat/a main 1)" 'lane A is started by bootstrap'
+  assert_match "B again: refused"                     "$(lane B feat/b2 main 7)" 'lane B already exists'
+  RUN2="$TMP/run-grid2"; reset_stub
+  (cd "$r" && "$KIT/bootstrap.sh" "$RUN2" "Grid2" main "$KIT/example-tasks.tsv" >/dev/null 2>&1)
+  assert_match "D before B: refused"                  "$(cd "$r" && "$KIT/add-lane.sh" "$RUN2" D feat/d main 5 2>&1)" 'lane D goes under lane B, which does not exist yet'
+  assert_match "no pane map: refused"                 "$(cd "$r" && "$KIT/add-lane.sh" "$TMP/nowhere" B feat/b main 2 2>&1)" 'run bootstrap.sh first'
+  RUN3="$TMP/run-nt"; reset_stub
+  (cd "$r" && TOWER_STUB=absent "$KIT/bootstrap.sh" "$RUN3" "NT" main "$KIT/example-tasks.tsv" >/dev/null 2>&1)
+  out=$(cd "$r" && TOWER_STUB=absent "$KIT/add-lane.sh" "$RUN3" B feat/b main 2,3 2>&1)
+  assert_eq "no tower: ownership in lanes.txt"        "$(tail -1 "$RUN3/lanes.txt")" "B=2,3"
 fi
 
 echo; echo "$pass passed, $fail failed"
