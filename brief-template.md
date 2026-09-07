@@ -45,11 +45,11 @@ LAST TASK IS DONE. Both kinds load the same tdd skill (claude from the
 mattpocock plugin, codex from ~/.codex/skills/tdd); "load the tdd skill" is
 the sentence that works for both.
 
-| claude lane                                                     | codex lane                                                        |
-|-----------------------------------------------------------------|-------------------------------------------------------------------|
-| spec-compliance review subagent (model sonnet) + code-quality review subagent (model opus); pass the model explicitly | review the task's diff itself, first against the task spec, then with the code-review skill; fix what it flags before the next task |
-| final whole-implementation review subagent (model opus)         | final self-review of the whole lane diff with the code-review skill |
-| reviewer roles as tower prints them                             | both reviewer roles are the lane's own model; say so in the brief |
+|                     | claude lane                                                     | codex lane                                                        |
+|---------------------|-----------------------------------------------------------------|-------------------------------------------------------------------|
+| per-task review     | spec-compliance review subagent (model sonnet) + code-quality review subagent (model opus); pass the model explicitly | review the task's diff itself, first against the task spec, then with the code-review skill; fix what it flags before the next task |
+| final review        | final whole-implementation review subagent (model opus)         | final self-review of the whole lane diff with the code-review skill |
+| reviewer roles      | as tower prints them                                             | both reviewer roles are the lane's own model; say so in the brief |
 
 A codex lane briefed with subagent instructions will improvise; match the
 tail to the kind.
@@ -57,10 +57,11 @@ tail to the kind.
 ## Merge points
 
 Lane A's branch is the integration branch. A lane that needs another lane's
-work merges that lane's branch before the task that needs it. A finished
-lane is merged into the integration branch by the orchestrator, right away,
-not by lane A at its next merge point. So lane B's brief never says "merge
-into A"; it says "tower note … ready to merge" and stops.
+work merges that lane's branch (or the integration branch, to pick up work
+already merged into it) before the task that needs it. A finished lane never
+merges its own branch into the integration branch — only the orchestrator
+does that, right away, not lane A at its next merge point. So lane B's brief
+never says "merge into A"; it says "tower note … ready to merge" and stops.
 
 ---
 
