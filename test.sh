@@ -80,5 +80,66 @@ if section detect; then
   assert_nomatch "contract: refusal stops the script" "$(detect_in "$r" 'echo reached')" "^reached$"
 fi
 
+# --- bootstrap ---------------------------------------------------------------
+if section bootstrap; then
+  boot() { (cd "$1" && shift && "$KIT/bootstrap.sh" "$@" 2>&1); }
+  r=$(fixture_repo bun-vitest); RUN="$TMP/run-empty"; reset_stub
+  out=$(boot "$r" "$RUN" "Empty run" main)
+  log=$(cat "$HERDR_STUB_LOG")
+  assert_match "empty: tower init without a source"     "$log" '^tower init --title Empty run --run '"$RUN"' --model implementer=claude-sonnet-5\[1m\] --model spec-reviewer=sonnet --model quality-reviewer=opus$'
+  assert_nomatch "empty: no lane assignment"            "$log" '^tower assign'
+  assert_match "layout: bottom row first"               "$log" '^herdr pane split --current --direction down --ratio 0.7 '
+  assert_match "layout: lane A right of the orchestrator" "$log" '^herdr pane split --current --direction right --ratio 0.3 '
+  assert_match "layout: console right of checks"        "$log" '^herdr pane split --pane pane-1 --direction right --ratio 0.5 '
+  assert_match "layout: checks pane runs the runner in the checkout" "$log" "^herdr pane run pane-1 cd '$r/.' && bunx vitest --watch$"
+  assert_match "layout: console runs tower"             "$log" '^herdr pane run pane-3 tower --stale 30$'
+  assert_match "lane A: agent named and started"        "$log" '^herdr agent start bun-vitest-lane-a --kind claude --pane pane-2 -- --model claude-sonnet-5\[1m\]$'
+  map=$(cat "$RUN/panes.txt")
+  assert_match "pane map: lane A line"                  "$map" '^lane A: +pane-2 +\(agent "bun-vitest-lane-a", kind claude, branch main, checkout '"$r"', model '
+  assert_match "pane map: checks line"                  "$map" '^checks: +pane-1 '
+  assert_match "pane map: console line"                 "$map" '^console: +pane-3 '
+  assert_match "pane map: check gate"                   "$map" '^check gate: +bun run typecheck && bun run test$'
+  assert_nomatch "pane map: no dev line by default"     "$map" '^dev:'
+  assert_match "output: the pane map is printed"        "$out" '^lane A: '
+  assert_match "output: next step for the empty opening" "$out" 'tower add'
+
+  RUN="$TMP/run-planned"; reset_stub
+  out=$(boot "$r" "$RUN" "Planned" main "$KIT/example-tasks.tsv")
+  log=$(cat "$HERDR_STUB_LOG")
+  assert_match "planned: tower init --tasks"            "$log" '^tower init --tasks '"$KIT"'/example-tasks.tsv --title Planned '
+  assert_match "planned: every task to lane A"          "$log" '^tower assign A 1,2,3$'
+  RUN="$TMP/run-lanes"; reset_stub
+  out=$(LANES="A=1 B=2,3" boot "$r" "$RUN" "Lanes" main "$KIT/example-tasks.tsv")
+  assert_match "planned: LANES assigns each lane"       "$(cat "$HERDR_STUB_LOG")" '^tower assign B 2,3$'
+  out=$(LANES="A=1" boot "$r" "$TMP/run-x" "X" main)
+  assert_match "empty: LANES without a source is refused" "$out" 'LANES needs a plan or task file'
+  out=$(boot "$r" "$TMP/run-y" "Y" main /nonexistent.md)
+  assert_match "a missing source is refused"            "$out" 'no such plan or task file'
+
+  RUN="$TMP/run-notower"; reset_stub
+  out=$(TOWER_STUB=absent boot "$r" "$RUN" "No tower" main)
+  assert_match "no tower: info with the pointer"        "$out" 'tower is not installed'
+  assert_eq "no tower: empty tasks.tsv with the header" "$(cat "$RUN/tasks.tsv")" "$(printf '# id\ttitle\tarea\tlane')"
+  assert_eq "no tower: lanes.txt exists and is empty"   "$(cat "$RUN/lanes.txt" | wc -l | tr -d ' ')" 0
+  assert_match "no tower: run.txt records the title"    "$(cat "$RUN/run.txt")" '^title: +No tower$'
+  assert_match "no tower: console shows the git log"    "$(cat "$HERDR_STUB_LOG")" '^herdr pane run pane-3 while true; do clear; .*git log'
+  assert_match "no tower: pane map says so"             "$(cat "$RUN/panes.txt")" '^console: +pane-3 +\(git log'
+  out=$(TOWER_STUB=absent boot "$r" "$TMP/run-nt2" "NT2" main "$KIT/example-tasks.tsv")
+  assert_eq "no tower, planned: lane A owns all"        "$(cat "$TMP/run-nt2/lanes.txt")" "A=all"
+  out=$(TOWER_STUB=old boot "$r" "$TMP/run-old" "Old" main)
+  assert_match "old tower is refused"                   "$out" 'older than 0.2.0'
+  [ -d "$TMP/run-old" ] && bad "old tower: nothing created" || ok "old tower: nothing created"
+
+  r=$(fixture_repo contract); RUN="$TMP/run-dev"; reset_stub
+  out=$(boot "$r" "$RUN" "Dev" main)
+  log=$(cat "$HERDR_STUB_LOG")
+  assert_match "dev: bottom row in thirds, checks after dev" "$log" '^herdr pane split --pane pane-1 --direction right --ratio 0.34 '
+  assert_match "dev: console after checks"              "$log" '^herdr pane split --pane pane-3 --direction right --ratio 0.5 '
+  assert_match "dev: dev pane runs in its dir"          "$log" "^herdr pane run pane-1 cd '$r/web' && make dev$"
+  assert_match "dev: checks pane runs make watch"       "$log" "^herdr pane run pane-3 cd '$r/.' && make watch$"
+  assert_match "dev: pane map has dev, checks, console" "$(cat "$RUN/panes.txt")" '^dev: +pane-1 '
+  assert_match "dev: console is pane-4"                 "$(cat "$RUN/panes.txt")" '^console: +pane-4 '
+fi
+
 echo; echo "$pass passed, $fail failed"
 [ "$fail" = 0 ]
