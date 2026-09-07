@@ -45,5 +45,20 @@ if section common; then
   assert_eq "repo_root from a checkout"          "$(cd "$r" && in_kit 'repo_root')" "$r"
 fi
 
+# --- executor ----------------------------------------------------------------
+if section executor; then
+  name_in() { (cd "$1" && bash -c ". \"\$KIT/common.sh\"; . \"\$KIT/executor.sh\"; agent_name \"$2\"" 2>&1); }
+  r=$(fixture_repo none)
+  assert_eq "agent_name: <repo>-lane-a"            "$(name_in "$r" -lane-a)" "none-lane-a"
+  wt="$r/.worktrees/some-branch"; mkdir -p "$wt"; git -C "$r" worktree add -q "$wt" -b some-branch >/dev/null 2>&1
+  assert_eq "agent_name: a worktree names the main checkout" "$(name_in "$wt" -lane-b)" "none-lane-b"
+  long="$TMP/repos/My.Very_Long-Repository Name With Spaces"; mkdir -p "$long"; git -C "$long" init -q
+  n=$(name_in "$long" -lane-a)
+  assert_eq "agent_name: 32 characters at most"    "${#n}" 32
+  assert_match "agent_name: lowercase, safe characters, suffix intact" "$n" '^[a-z][a-z0-9_-]*-lane-a$'
+  digits="$TMP/repos/123-Repo"; mkdir -p "$digits"; git -C "$digits" init -q
+  assert_eq "agent_name: starts with a letter"     "$(name_in "$digits" -lane-a)" "repo-lane-a"
+fi
+
 echo; echo "$pass passed, $fail failed"
 [ "$fail" = 0 ]
