@@ -18,6 +18,18 @@ section() { [ -z "$ONLY" ] || [ "$ONLY" = "$1" ]; }
 TMP=$(cd "$(mktemp -d)" && pwd -P); trap 'rm -rf "$TMP"' EXIT
 export DRY_RUN=1 HERDR_STUB_LOG="$TMP/log" HERDR_STUB_COUNTER="$TMP/counter" HERDR_STUB_STATES_DIR="$TMP/states"
 mkdir -p "$HERDR_STUB_STATES_DIR"
+
+# Guard: every section below runs herdr/tower calls through common.sh's
+# DRY_RUN PATH shim. If a stub is missing, not executable, or shadowed by
+# something earlier on PATH, refuse outright rather than risk a script under
+# test touching the real herdr or tower (this happened once: HERDR_ENV=1 is
+# inherited from the orchestrating pane, so `in_herdr` alone does not stop a
+# script run outside test.sh and outside DRY_RUN=1 from driving real panes).
+_herdr_which=$(bash -c ". \"$KIT/common.sh\"; command -v herdr" 2>/dev/null || true)
+_tower_which=$(bash -c ". \"$KIT/common.sh\"; command -v tower" 2>/dev/null || true)
+[ "$_herdr_which" = "$KIT/tests/stub/herdr" ] || { echo "test.sh: herdr resolves to '$_herdr_which', not the stub ($KIT/tests/stub/herdr) — refusing to run" >&2; exit 1; }
+[ "$_tower_which" = "$KIT/tests/stub/tower" ] || { echo "test.sh: tower resolves to '$_tower_which', not the stub ($KIT/tests/stub/tower) — refusing to run" >&2; exit 1; }
+unset _herdr_which _tower_which
 reset_stub() { : > "$HERDR_STUB_LOG"; rm -f "$HERDR_STUB_COUNTER"; }
 # A git repo built from tests/fixtures/<name> (or empty). Prints its path.
 fixture_repo() {
