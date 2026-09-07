@@ -6,7 +6,9 @@
 #   claude: claude-sonnet-5[1m], started with --model.
 #   codex:  gpt-6-astra, started with -m, no approval prompts (-a never), writes
 #           limited to the worktree (-s workspace-write) with network allowed
-#           for installs and fetches.
+#           for installs and fetches. Two dirs outside the worktree are added as
+#           writable: the run dir (tower task|block|note append to it) and the
+#           repo's common git dir (a lane worktree commits into it).
 #
 # Expects `set -u`; provides start_agent NAME PANE and
 # start_agent_with_trust_retry NAME PANE.
@@ -37,8 +39,12 @@ start_agent() {
   local name="$1" pane="$2"
   case "$EXECUTOR_KIND" in
     claude) herdr agent start "$name" --kind claude --pane "$pane" -- --model "$EXECUTOR_MODEL" ;;
-    codex)  herdr agent start "$name" --kind codex --pane "$pane" -- -m "$EXECUTOR_MODEL" \
-              -a never -s workspace-write -c sandbox_workspace_write.network_access=true ;;
+    codex)
+      local extra=()
+      [ -n "${RUN_DIR:-}" ] && extra+=(--add-dir "$RUN_DIR")
+      extra+=(--add-dir "$(git rev-parse --path-format=absolute --git-common-dir)")
+      herdr agent start "$name" --kind codex --pane "$pane" -- -m "$EXECUTOR_MODEL" \
+        -a never -s workspace-write -c sandbox_workspace_write.network_access=true "${extra[@]}" ;;
   esac
 }
 
