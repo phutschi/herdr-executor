@@ -188,5 +188,31 @@ if section add-lane; then
   assert_eq "no tower: ownership in lanes.txt"        "$(tail -1 "$RUN3/lanes.txt")" "B=2,3"
 fi
 
+# --- watch -------------------------------------------------------------------
+if section watch; then
+  S="$HERDR_STUB_STATES_DIR"; RUN="$TMP/run-watch"; mkdir -p "$RUN"
+  watch() { (cd "$TMP" && ROUND_SECONDS="${ROUND:-3}" GRACE_SECONDS=0 POLL_SECONDS=0 "$KIT/watch-lanes.sh" "$RUN" "$@" 2>&1; echo "exit=$?"); }
+  rm -f "$S"/*
+  echo working > "$S/a"; out=$(ROUND=1 watch a)
+  assert_match "quiet: exit 3"                        "$out" 'exit=3$'
+  assert_nomatch "quiet: no attention line"           "$out" '^attention:'
+  echo blocked > "$S/a"; printf 'need the API key\n' > "$S/a.tail"; out=$(watch a)
+  assert_match "blocked: attention line first"        "$out" '^attention: a blocked'
+  assert_match "blocked: tail printed"                "$out" 'need the API key'
+  assert_match "blocked: exit 0"                      "$out" 'exit=0$'
+  echo idle > "$S/a"; printf 'tower note --lane A ALL DONE - check green\n' > "$S/a.tail"; out=$(watch a)
+  assert_match "idle after the final report"          "$out" '^attention: a idle-after-final-report'
+  echo idle > "$S/a"; printf 'Running tests...\n' > "$S/a.tail"; out=$(watch a)
+  assert_match "idle without a report is unexplained" "$out" '^attention: a idle-unexplained'
+  echo gone > "$S/a"; out=$(watch a)
+  assert_match "gone"                                 "$out" '^attention: a gone'
+  echo working > "$S/a"; echo done > "$S/b"; out=$(watch a b)
+  assert_match "two lanes: only the settled one"      "$out" '^attention: b done'
+  assert_nomatch "two lanes: the working one is quiet" "$out" '^attention: a '
+  assert_match "tower summary when tower is present"  "$out" '^--- tower'
+  out=$(TOWER_STUB=absent watch b)
+  assert_match "no tower: git log instead"            "$out" 'no tower: task state is in git'
+fi
+
 echo; echo "$pass passed, $fail failed"
 [ "$fail" = 0 ]
